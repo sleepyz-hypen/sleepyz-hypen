@@ -1,0 +1,1590 @@
+<html><head><base href="https://websim.io/cloth-physics/">
+<title>Advanced Cloth Physics Simulation with Intricate Weave Patterns</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Interactive cloth physics simulation with multiplayer chat. Experiment with different weave patterns, shapes, and physics parameters.">
+<meta property="og:title" content="Advanced Cloth Physics Simulation">
+<meta property="og:description" content="Interactive cloth physics sandbox with real-time multiplayer chat. Create and manipulate fabric with various weave patterns and shapes.">
+<meta property="og:image" content="https://websim.io/cloth-physics/preview.jpg">
+<meta property="og:url" content="https://websim.io/cloth-physics/">
+<link rel="icon" type="image/png" href="https://websim.io/favicon.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.min.js"></script>
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: #1a1a2e;
+    font-family: Arial, sans-serif;
+    color: #fff;
+  }
+  canvas {
+    display: block;
+    margin-right: 300px; /* Make room for chat sidebar */
+  }
+  #controls {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    border-radius: 5px;
+    margin-right: 310px; /* Adjust controls position */
+  }
+  button, select {
+    background-color: #16213e;
+    color: #fff;
+    border: none;
+    padding: 5px 10px;
+    margin: 5px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  button:hover, select:hover {
+    background-color: #0f3460;
+  }
+  #debug {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    font-family: monospace;
+  }
+  .slider-container {
+    margin-top: 10px;
+  }
+  .slider-container label {
+    display: inline-block;
+    width: 120px;
+  }
+  input[type="range"] {
+    width: 200px;
+    vertical-align: middle;
+  }
+  .value-display {
+    display: inline-block;
+    width: 50px;
+    text-align: right;
+  }
+  #tools, #weavePatterns {
+    margin-top: 10px;
+  }
+  #tools label, #weavePatterns label {
+    margin-right: 10px;
+  }
+  #collision-toggle {
+    margin-top: 10px;
+  }
+  #chat-sidebar {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 300px;
+    background: rgba(26, 26, 46, 0.9);
+    border-left: 1px solid #333;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    z-index: 1000;
+  }
+  #chat-messages {
+    flex-grow: 1;
+    overflow-y: auto;
+    margin-bottom: 10px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 5px;
+  }
+  .chat-message {
+    margin-bottom: 8px;
+    padding: 5px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+  }
+  .chat-message .username {
+    color: #4a9eff;
+    font-weight: bold;
+  }
+  .chat-message .time {
+    color: #666;
+    font-size: 0.8em;
+    margin-left: 5px;
+  }
+  #chat-input-container {
+    display: flex;
+    gap: 5px;
+  }
+  #chat-input {
+    flex-grow: 1;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid #333;
+    padding: 8px;
+    border-radius: 3px;
+    color: white;
+  }
+  #chat-send {
+    background: #4a9eff;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  #chat-send:hover {
+    background: #357abd;
+  }
+  #username-container {
+    margin-bottom: 10px;
+  }
+  #username-input {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid #333;
+    padding: 8px;
+    border-radius: 3px;
+    color: white;
+    margin-bottom: 5px;
+  }
+  #loading-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: #1a1a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    transition: opacity 0.5s;
+  }
+  #loading-screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid #ffffff20;
+    border-top: 5px solid #4a9eff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+</head>
+<body>
+<div id="loading-screen">
+  <div class="loading-spinner"></div>
+</div>
+<canvas id="canvas"></canvas>
+<div id="controls">
+  <button id="reset">Reset</button>
+  <button id="pauseBtn">Pause</button>
+  <div id="tools">
+    <label>Tools:</label>
+    <input type="radio" id="dragTool" name="tool" value="drag" checked>
+    <label for="dragTool">Drag</label>
+    <input type="radio" id="cutTool" name="tool" value="cut">
+    <label for="cutTool">Cut</label>
+    <input type="radio" id="pinTool" name="tool" value="pin">
+    <label for="pinTool">Pin/Unpin</label>
+    <input type="radio" id="addTool" name="tool" value="add">
+    <label for="addTool">Add Point</label>
+  </div>
+  <div id="weavePatterns">
+    <label for="weavePattern">Weave Pattern:</label>
+    <select id="weavePattern">
+      <option value="plain">Plain Weave</option>
+      <option value="twill">Twill Weave</option>
+      <option value="satin">Satin Weave</option>
+      <option value="basketWeave">Basket Weave</option>
+      <option value="leno">Leno Weave</option>
+      <option value="honeycomb">Honeycomb</option>
+      <option value="fibonacci">Fibonacci Spiral</option>
+      <option value="voronoi">Voronoi Tessellation</option>
+    </select>
+  </div>
+  <div id="shapePresets">
+    <label for="shapeSelect">Shape:</label>
+    <select id="shapeSelect">
+      <option value="rectangle">Rectangle</option>
+      <option value="circle">Circular Tarp</option>
+      <option value="triangle">Triangle</option>
+      <option value="hexagon">Hexagon</option>
+      <option value="star">Star</option>
+      <option value="spiral">Spiral</option>
+    </select>
+  </div>
+  <div id="collision-toggle">
+    <input type="checkbox" id="collisionToggle">
+    <label for="collisionToggle">Enable Point Collisions</label>
+  </div>
+  <div class="slider-container">
+    <label for="clothSizeSlider">Cloth Size:</label>
+    <input type="range" id="clothSizeSlider" min="5" max="40" value="30">
+    <span id="clothSizeValue" class="value-display">30</span>
+  </div>
+  <div class="slider-container">
+    <label for="tensionSlider">Cloth Tension:</label>
+    <input type="range" id="tensionSlider" min="0" max="100" value="50">
+    <span id="tensionValue" class="value-display">50</span>%
+  </div>
+  <div class="slider-container">
+    <label for="gravitySlider">Gravity:</label>
+    <input type="range" id="gravitySlider" min="0" max="200" value="50">
+    <span id="gravityValue" class="value-display">50</span>%
+  </div>
+  <div class="slider-container">
+    <label for="windSlider">Wind:</label>
+    <input type="range" id="windSlider" min="-100" max="100" value="0">
+    <span id="windValue" class="value-display">0</span>%
+  </div>
+  <div class="slider-container">
+    <label for="tearStrengthSlider">Tear Strength:</label>
+    <input type="range" id="tearStrengthSlider" min="0" max="100" value="95">
+    <span id="tearStrengthValue" class="value-display">95</span>%
+  </div>
+  <div class="slider-container">
+    <label for="tearRandomnessSlider">Tear Randomness:</label>
+    <input type="range" id="tearRandomnessSlider" min="0" max="100" value="0">
+    <span id="tearRandomnessValue" class="value-display">0</span>%
+  </div>
+  <div class="slider-container">
+    <label for="dampingSlider">Damping:</label>
+    <input type="range" id="dampingSlider" min="90" max="100" value="99">
+    <span id="dampingValue" class="value-display">0.99</span>
+  </div>
+  <div class="slider-container">
+    <label for="simSpeedSlider">Simulation Speed:</label>
+    <input type="range" id="simSpeedSlider" min="10" max="200" value="100">
+    <span id="simSpeedValue" class="value-display">100</span>%
+  </div>
+  <div class="slider-container">
+    <label for="dragRadiusSlider">Drag Radius:</label>
+    <input type="range" id="dragRadiusSlider" min="10" max="200" value="50">
+    <span id="dragRadiusValue" class="value-display">50</span>px
+  </div>
+  <div class="slider-container">
+    <label for="meshOpacitySlider">Mesh Opacity:</label>
+    <input type="range" id="meshOpacitySlider" min="0" max="100" value="80">
+    <span id="meshOpacityValue" class="value-display">80</span>%
+  </div>
+  <div id="meshOptions">
+    <input type="checkbox" id="meshToggle">
+    <label for="meshToggle">Show Mesh Fill</label>
+    <select id="meshStyle">
+      <option value="solid">Solid Color</option>
+      <option value="gradient">Gradient</option>
+      <option value="fabric">Fabric Texture</option>
+      <option value="leather">Leather Texture</option>
+    </select>
+  </div>
+  <div id="colorOptions">
+    <input type="checkbox" id="rainbowToggle">
+    <label for="rainbowToggle">Rainbow Mode</label>
+  </div>
+</div>
+<div id="chat-sidebar">
+  <div id="username-container">
+    <input type="text" id="username-input" placeholder="Enter your username">
+  </div>
+  <div id="chat-messages"></div>
+  <div id="chat-input-container">
+    <input type="text" id="chat-input" placeholder="Type a message...">
+    <button id="chat-send">Send</button>
+  </div>
+</div>
+<div id="debug"></div>
+
+<script>
+const socket = io('wss://websim.io', {
+  path: '/chat',
+  secure: true,
+  rejectUnauthorized: false
+});
+
+const chatMessages = document.getElementById('chat-messages');
+const chatInput = document.getElementById('chat-input');
+const chatSend = document.getElementById('chat-send');
+const usernameInput = document.getElementById('username-input');
+
+let username = localStorage.getItem('chat-username') || '';
+if (username) {
+  usernameInput.value = username;
+}
+
+usernameInput.addEventListener('change', (e) => {
+  username = e.target.value;
+  localStorage.setItem('chat-username', username);
+});
+
+function addMessage(message) {
+  const messageElement = document.createElement('div');
+  messageElement.className = 'chat-message';
+  const time = new Date().toLocaleTimeString();
+  messageElement.innerHTML = `
+    <span class="username">${message.username}</span>
+    <span class="time">${time}</span>
+    <div class="message-content">${message.text}</div>
+  `;
+  chatMessages.appendChild(messageElement);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+chatSend.addEventListener('click', sendMessage);
+chatInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    sendMessage();
+  }
+});
+
+function sendMessage() {
+  const text = chatInput.value.trim();
+  if (!text || !username) return;
+
+  const message = {
+    username: username,
+    text: text
+  };
+
+  socket.emit('chat-message', message);
+  addMessage(message);
+  chatInput.value = '';
+}
+
+socket.on('chat-message', (message) => {
+  addMessage(message);
+});
+
+socket.on('connect', () => {
+  addMessage({
+    username: 'System',
+    text: 'Connected to chat'
+  });
+});
+
+socket.on('disconnect', () => {
+  addMessage({
+    username: 'System',
+    text: 'Disconnected from chat'
+  });
+});
+</script>
+<script>
+// Existing JavaScript code...
+const PERLIN_YWRAPB = 4;
+const PERLIN_YWRAP = 1<<PERLIN_YWRAPB;
+const PERLIN_ZWRAPB = 8;
+const PERLIN_ZWRAP = 1<<PERLIN_ZWRAPB;
+const PERLIN_SIZE = 4095;
+
+let perlin_octaves = 4;
+let perlin_amp_falloff = 0.5;
+
+const scaled_cosine = i => 0.5*(1.0-Math.cos(i*Math.PI));
+
+let perlin = null;
+
+function noise(x, y = 0, z = 0) {
+  if (perlin == null) {
+    perlin = new Array(PERLIN_SIZE + 1);
+    for (let i = 0; i < PERLIN_SIZE + 1; i++) {
+      perlin[i] = Math.random();
+    }
+  }
+
+  if (x<0) { x=-x; }
+  if (y<0) { y=-y; }
+  if (z<0) { z=-z; }
+
+  let xi=Math.floor(x), yi=Math.floor(y), zi=Math.floor(z);
+  let xf = x - xi;
+  let yf = y - yi;
+  let zf = z - zi;
+  let rxf, ryf;
+
+  let r=0;
+  let ampl=0.5;
+
+  let n1,n2,n3;
+
+  for (let o=0; o<perlin_octaves; o++) {
+    let of=xi+(yi<<PERLIN_YWRAPB)+(zi<<PERLIN_ZWRAPB);
+
+    rxf = scaled_cosine(xf);
+    ryf = scaled_cosine(yf);
+
+    n1  = perlin[of&PERLIN_SIZE];
+    n1 += rxf*(perlin[(of+1)&PERLIN_SIZE]-n1);
+    n2  = perlin[(of+PERLIN_YWRAP)&PERLIN_SIZE];
+    n2 += rxf*(perlin[(of+PERLIN_YWRAP+1)&PERLIN_SIZE]-n2);
+    n1 += ryf*(n2-n1);
+
+    of += PERLIN_ZWRAP;
+    n2  = perlin[of&PERLIN_SIZE];
+    n2 += rxf*(perlin[(of+1)&PERLIN_SIZE]-n2);
+    n3  = perlin[(of+PERLIN_YWRAP)&PERLIN_SIZE];
+    n3 += rxf*(perlin[(of+PERLIN_YWRAP+1)&PERLIN_SIZE]-n3);
+    n2 += ryf*(n3-n2);
+
+    n1 += scaled_cosine(zf)*(n2-n1);
+
+    r += n1*ampl;
+    ampl *= perlin_amp_falloff;
+    xi<<=1;
+    xf*=2;
+    yi<<=1;
+    yf*=2;
+    zi<<=1;
+    zf*=2;
+
+    if (xf>=1.0) { xi++; xf--; }
+    if (yf>=1.0) { yi++; yf--; }
+    if (zf>=1.0) { zi++; zf--; }
+  }
+  return r;
+}
+
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const debugElement = document.getElementById('debug');
+const clothSizeSlider = document.getElementById('clothSizeSlider');
+const clothSizeValue = document.getElementById('clothSizeValue');
+const tensionSlider = document.getElementById('tensionSlider');
+const tensionValue = document.getElementById('tensionValue');
+const gravitySlider = document.getElementById('gravitySlider');
+const gravityValue = document.getElementById('gravityValue');
+const windSlider = document.getElementById('windSlider');
+const windValue = document.getElementById('windValue');
+const tearStrengthSlider = document.getElementById('tearStrengthSlider');
+const tearStrengthValue = document.getElementById('tearStrengthValue');
+const tearRandomnessSlider = document.getElementById('tearRandomnessSlider');
+const tearRandomnessValue = document.getElementById('tearRandomnessValue');
+const dampingSlider = document.getElementById('dampingSlider');
+const dampingValue = document.getElementById('dampingValue');
+const simSpeedSlider = document.getElementById('simSpeedSlider');
+const simSpeedValue = document.getElementById('simSpeedValue');
+const collisionToggle = document.getElementById('collisionToggle');
+const weavePatternSelect = document.getElementById('weavePattern');
+const shapeSelect = document.getElementById('shapeSelect');
+
+let dragRadius = 50; 
+let draggedPoints = []; 
+let meshOpacity = 0.8;
+let isRainbowMode = false;
+let rainbowOffset = 0;
+
+canvas.width = window.innerWidth - 300; // Subtract chat sidebar width
+canvas.height = window.innerHeight;
+
+let isPaused = false;
+let tearRandomness = 0;
+let showMesh = false;
+let meshStyle = 'solid';
+
+class Point {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.oldX = x;
+    this.oldY = y;
+    this.vx = 0;
+    this.vy = 0;
+    this.pinned = false;
+    this.tension = 0;
+  }
+
+  update(dt) {
+    if (this.pinned) return;
+
+    const vx = (this.x - this.oldX) * friction;
+    const vy = (this.y - this.oldY) * friction;
+
+    this.oldX = this.x;
+    this.oldY = this.y;
+
+    this.x += vx;
+    this.y += vy;
+
+    this.y += gravityStrength * dt;
+    this.x += windStrength * dt;
+
+    this.x += (Math.random() - 0.5) * fluidMotion;
+    this.y += (Math.random() - 0.5) * fluidMotion;
+
+    // Add chat sidebar collision
+    const chatSidebarX = canvas.width - 300; // Width of the chat sidebar
+    const padding = 20;
+    
+    // Collision with chat sidebar
+    if (this.x > chatSidebarX - padding) {
+      this.x = chatSidebarX - padding;
+      this.oldX = this.x + vx * 0.5; // Add some bounce effect
+    }
+
+    // Existing boundary checks
+    this.x = Math.max(padding, Math.min(this.x, canvas.width - padding));
+    this.y = Math.max(padding, Math.min(this.y, canvas.height - padding));
+  }
+}
+
+class Stick {
+  constructor(p1, p2) {
+    this.p1 = p1;
+    this.p2 = p2;
+    this.length = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    this.stiffness = 0.5;
+    this.tension = 0;
+    
+    const noiseScale = 0.01;
+    const noiseVal = noise(p1.x * noiseScale, p1.y * noiseScale);
+    this.tearMultiplier = 0.5 + noiseVal + (Math.random() * tearRandomness / 200);
+  }
+
+  update() {
+    const dx = this.p2.x - this.p1.x;
+    const dy = this.p2.y - this.p1.y;
+    const distance = Math.hypot(dx, dy);
+    const difference = this.length - distance;
+    const percent = (difference / distance) * this.stiffness;
+    const offsetX = dx * percent;
+    const offsetY = dy * percent;
+
+    if (!this.p1.pinned) {
+      this.p1.x -= offsetX * stickStrength;
+      this.p1.y -= offsetY * stickStrength;
+    }
+    if (!this.p2.pinned) {
+      this.p2.x += offsetX * stickStrength;
+      this.p2.y += offsetY * stickStrength;
+    }
+
+    this.tension = Math.abs(difference) / (tearStrength * this.tearMultiplier);
+    this.p1.tension = Math.max(this.p1.tension, this.tension);
+    this.p2.tension = Math.max(this.p2.tension, this.tension);
+
+    if (tearStrength < 50) {
+      if (Math.abs(difference) > tearStrength * this.tearMultiplier && this.p1 !== draggedPoint && this.p2 !== draggedPoint) {
+        return true; 
+      }
+    }
+    return false;
+  }
+}
+
+let points = [];
+let sticks = [];
+let draggedPoint = null;
+let mouseX = 0;
+let mouseY = 0;
+let lastMouseX = 0;
+let lastMouseY = 0;
+let isMouseDown = false;
+
+let friction = 0.99;
+let gravityStrength = 0.5;
+let windStrength = 0;
+const fluidMotion = 0.05;
+let stickStrength = 0.03;
+let tearStrength = 47.5;
+let clothSize = 30;
+let simSpeed = 1;
+
+function createRectangularCloth() {
+  points = [];
+  sticks = [];
+  const rows = clothSize;
+  const cols = clothSize;
+  const maxWidth = canvas.width * 0.8;
+  const maxHeight = canvas.height * 0.8;
+  const spacing = Math.min(maxWidth / cols, maxHeight / rows);
+  const startX = canvas.width / 2 - (cols * spacing / 2);
+  const startY = canvas.height * 0.2;
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const p = new Point(
+        startX + x * spacing,
+        startY + y * spacing
+      );
+      if (y === 0) {
+        p.pinned = true;
+      }
+      points.push(p);
+    }
+  }
+  
+  applyWeavePattern();
+}
+
+function createCircularTarp() {
+  points = [];
+  sticks = [];
+  const radius = Math.min(canvas.width, canvas.height) * 0.35;
+  const segments = clothSize;
+  const rings = Math.floor(clothSize / 2);
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height * 0.3;
+
+  points.push(new Point(centerX, centerY));
+
+  for (let r = 1; r <= rings; r++) {
+    const currentRadius = (r / rings) * radius;
+    for (let s = 0; s < segments; s++) {
+      const angle = (s / segments) * Math.PI * 2;
+      const x = centerX + Math.cos(angle) * currentRadius;
+      const y = centerY + Math.sin(angle) * currentRadius;
+      const point = new Point(x, y);
+      if (r === rings) point.pinned = true;
+      points.push(point);
+    }
+  }
+}
+
+function createTriangle() {
+  points = [];
+  sticks = [];
+  const size = Math.min(canvas.width, canvas.height) * 0.7;
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height * 0.3;
+  const rows = clothSize;
+
+  for (let y = 0; y < rows; y++) {
+    const rowWidth = (rows - y) / rows;
+    const points_in_row = Math.max(2, Math.floor(rowWidth * clothSize));
+    for (let x = 0; x < points_in_row; x++) {
+      const xPos = centerX - (size * rowWidth / 2) + (x * size * rowWidth / (points_in_row - 1));
+      const yPos = centerY + (y * size / rows);
+      const point = new Point(xPos, yPos);
+      if (y === 0) point.pinned = true;
+      points.push(point);
+    }
+  }
+}
+
+function createHexagon() {
+  points = [];
+  sticks = [];
+  const radius = Math.min(canvas.width, canvas.height) * 0.35;
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height * 0.3;
+  const sides = 6;
+  const rows = clothSize / 2;
+
+  for (let r = 0; r < rows; r++) {
+    const circumference = 2 * Math.PI * (r / rows) * radius;
+    const pointsInRing = Math.max(sides, Math.floor(circumference / 20));
+    
+    for (let p = 0; p < pointsInRing; p++) {
+      const angle = (p / pointsInRing) * 2 * Math.PI;
+      const currentRadius = (r / rows) * radius;
+      const x = centerX + Math.cos(angle) * currentRadius;
+      const y = centerY + Math.sin(angle) * currentRadius;
+      const point = new Point(x, y);
+      if (r === rows - 1) point.pinned = true;
+      points.push(point);
+    }
+  }
+}
+
+function createStar() {
+  points = [];
+  sticks = [];
+  const outerRadius = Math.min(canvas.width, canvas.height) * 0.35;
+  const innerRadius = outerRadius * 0.5;
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height * 0.5;
+  const points_count = 5;
+  const rows = clothSize / 2;
+
+  for (let r = 0; r < rows; r++) {
+    const ratio = r / (rows - 1);
+    const pointsInRing = Math.max(points_count * 2, Math.floor(ratio * clothSize));
+    
+    for (let p = 0; p < pointsInRing; p++) {
+      const angle = (p / pointsInRing) * 2 * Math.PI;
+      const radius = outerRadius * ratio;
+      const radiusModifier = 1 - (0.5 * Math.sin(angle * points_count));
+      const currentRadius = radius * radiusModifier;
+      const x = centerX + Math.cos(angle) * currentRadius;
+      const y = centerY + Math.sin(angle) * currentRadius;
+      const point = new Point(x, y); // Create the point first
+      if (r === rows - 1) {
+        point.pinned = true; // Now set the pinned property
+      }
+      points.push(point);
+    }
+  }
+}
+
+function createSpiral() {
+  points = [];
+  sticks = [];
+  const maxRadius = Math.min(canvas.width, canvas.height) * 0.35;
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height * 0.3;
+  const spiralRotations = 2;
+  const pointsPerRotation = clothSize;
+  const totalPoints = pointsPerRotation * spiralRotations;
+
+  for (let i = 0; i < totalPoints; i++) {
+    const ratio = i / totalPoints;
+    const angle = ratio * Math.PI * 2 * spiralRotations;
+    const radius = ratio * maxRadius;
+    const x = centerX + Math.cos(angle) * radius;
+    const y = centerY + Math.sin(angle) * radius;
+    const point = new Point(x, y);
+    if (i >= totalPoints - pointsPerRotation) point.pinned = true;
+    points.push(point);
+  }
+}
+
+// Modify the createCloth function to include the new shapes:
+function createCloth() {
+  points = [];
+  sticks = [];
+
+  const shape = shapeSelect.value;
+  switch(shape) {
+    case 'rectangle':
+      createRectangularCloth();
+      break;
+    case 'circle':
+      createCircularTarp();
+      break;
+    case 'triangle':
+      createTriangle();
+      break;
+    case 'hexagon':
+      createHexagon();
+      break;
+    case 'star':
+      createStar();
+      break;
+    case 'spiral':
+      createSpiral();
+      break;
+  }
+
+  applyWeavePattern();
+}
+
+function createPlainWeave() {
+  for (let y = 0; y < clothSize; y++) {
+    for (let x = 0; x < clothSize; x++) {
+      const currentPoint = points[y * clothSize + x];
+      if (!currentPoint) continue;
+
+      if (x > 0) {
+        const leftPoint = points[y * clothSize + (x - 1)];
+        if (leftPoint) {
+          sticks.push(new Stick(currentPoint, leftPoint));
+        }
+      }
+      if (y > 0) {
+        const topPoint = points[(y - 1) * clothSize + x];
+        if (topPoint) {
+          sticks.push(new Stick(currentPoint, topPoint));
+        }
+      }
+    }
+  }
+}
+
+function createTwillWeave() {
+  for (let y = 0; y < clothSize; y++) {
+    for (let x = 0; x < clothSize; x++) {
+      const currentPoint = points[y * clothSize + x];
+      if (!currentPoint) continue;
+
+      if (x > 0) {
+        const leftPoint = points[y * clothSize + (x - 1)];
+        if (leftPoint) {
+          sticks.push(new Stick(currentPoint, leftPoint));
+        }
+      }
+      if (y > 0) {
+        if ((x + y) % 3 !== 0) {
+          const topPoint = points[(y - 1) * clothSize + x];
+          if (topPoint) {
+            sticks.push(new Stick(currentPoint, topPoint));
+          }
+        }
+      }
+    }
+  }
+}
+
+function createSatinWeave() {
+  for (let y = 0; y < clothSize; y++) {
+    for (let x = 0; x < clothSize; x++) {
+      const currentPoint = points[y * clothSize + x];
+      if (!currentPoint) continue;
+
+      if (x > 0) {
+        const leftPoint = points[y * clothSize + (x - 1)];
+        if (leftPoint) {
+          sticks.push(new Stick(currentPoint, leftPoint));
+        }
+      }
+      if (y > 0) {
+        if ((x + y) % 5 !== 0) {
+          const topPoint = points[(y - 1) * clothSize + x];
+          if (topPoint) {
+            sticks.push(new Stick(currentPoint, topPoint));
+          }
+        }
+      }
+    }
+  }
+}
+
+function createBasketWeave() {
+  for (let y = 0; y < clothSize; y++) {
+    for (let x = 0; x < clothSize; x++) {
+      const currentPoint = points[y * clothSize + x];
+      if (!currentPoint) continue;
+
+      if (x > 0) {
+        const leftPoint = points[y * clothSize + (x - 1)];
+        if (leftPoint) {
+          sticks.push(new Stick(currentPoint, leftPoint));
+        }
+      }
+      if (y > 0) {
+        if ((Math.floor(x / 2) + Math.floor(y / 2)) % 2 === 0) {
+          const topPoint = points[(y - 1) * clothSize + x];
+          if (topPoint) {
+            sticks.push(new Stick(currentPoint, topPoint));
+          }
+        }
+      }
+    }
+  }
+}
+
+function createLenoWeave() {
+  for (let y = 0; y < clothSize; y++) {
+    for (let x = 0; x < clothSize; x++) {
+      const currentPoint = points[y * clothSize + x];
+      if (!currentPoint) continue;
+
+      if (x > 0) {
+        const leftPoint = points[y * clothSize + (x - 1)];
+        if (leftPoint) {
+          sticks.push(new Stick(currentPoint, leftPoint));
+        }
+      }
+      if (y > 0) {
+        if (x % 3 === 0) {
+          const topPoint = points[y * clothSize + (x + 1)];
+          if (topPoint) {
+            sticks.push(new Stick(currentPoint, topPoint));
+          }
+        } else if (x % 3 === 1) {
+          const topPoint = points[y * clothSize + (x - 1)];
+          if (topPoint) {
+            sticks.push(new Stick(currentPoint, topPoint));
+          }
+        } else {
+          const topPoint = points[(y - 1) * clothSize + x];
+          if (topPoint) {
+            sticks.push(new Stick(currentPoint, topPoint));
+          }
+        }
+      }
+    }
+  }
+}
+
+function createHoneycomb() {
+  for (let y = 0; y < clothSize; y++) {
+    for (let x = 0; x < clothSize; x++) {
+      const currentPoint = points[y * clothSize + x];
+      if (!currentPoint) continue;
+
+      if (x > 0) {
+        const leftPoint = points[y * clothSize + (x - 1)];
+        if (leftPoint) {
+          sticks.push(new Stick(currentPoint, leftPoint));
+        }
+      }
+      if (y > 0) {
+        if ((x + y) % 3 !== 2) {
+          const topPoint = points[(y - 1) * clothSize + x];
+          if (topPoint) {
+            sticks.push(new Stick(currentPoint, topPoint));
+          }
+        }
+        if (x > 0 && y % 2 === 1) {
+          const topPoint = points[(y - 1) * clothSize + (x - 1)];
+          if (topPoint) {
+            sticks.push(new Stick(currentPoint, topPoint));
+          }
+        }
+      }
+    }
+  }
+}
+
+function createFibonacciSpiral() {
+  const fibonacci = [0, 1];
+  for (let i = 2; i < clothSize; i++) {
+    fibonacci.push(fibonacci[i - 1] + fibonacci[i - 2]);
+  }
+
+  for (let y = 0; y < clothSize; y++) {
+    for (let x = 0; x < clothSize; x++) {
+      const currentPoint = points[y * clothSize + x];
+      if (!currentPoint) continue;
+
+      if (x > 0) {
+        const leftPoint = points[y * clothSize + (x - 1)];
+        if (leftPoint) {
+          sticks.push(new Stick(currentPoint, leftPoint));
+        }
+      }
+      if (y > 0) {
+        if (fibonacci.includes((x * y) % clothSize)) {
+          const topPoint = points[(y - 1) * clothSize + x];
+          if (topPoint) {
+            sticks.push(new Stick(currentPoint, topPoint));
+          }
+        }
+      }
+    }
+  }
+}
+
+function createVoronoiTessellation() {
+  const seedPoints = [];
+  for (let i = 0; i < 10; i++) {
+    seedPoints.push({
+      x: Math.floor(Math.random() * clothSize),
+      y: Math.floor(Math.random() * clothSize)
+    });
+  }
+
+  for (let y = 0; y < clothSize; y++) {
+    for (let x = 0; x < clothSize; x++) {
+      const currentPoint = points[y * clothSize + x];
+      if (!currentPoint) continue;
+
+      if (x > 0) {
+        const leftPoint = points[y * clothSize + (x - 1)];
+        if (leftPoint) {
+          sticks.push(new Stick(currentPoint, leftPoint));
+        }
+      }
+      if (y > 0) {
+        const closestSeed = seedPoints.reduce((closest, seed) => {
+          const distToSeed = Math.hypot(x - seed.x, y - seed.y);
+          const distToClosest = Math.hypot(x - closest.x, y - closest.y);
+          return distToSeed < distToClosest ? seed : closest;
+        });
+
+        if ((x + y) % 2 === 0 || (closestSeed.x + closestSeed.y) % 2 === 0) {
+          const topPoint = points[(y - 1) * clothSize + x];
+          if (topPoint) {
+            sticks.push(new Stick(currentPoint, topPoint));
+          }
+        }
+      }
+    }
+  }
+}
+
+function applyWeavePattern() {
+  sticks = [];
+  const pattern = weavePatternSelect.value;
+
+  switch(pattern) {
+    case 'plain':
+      createPlainWeave();
+      break;
+    case 'twill':
+      createTwillWeave();
+      break;
+    case 'satin':
+      createSatinWeave();
+      break;
+    case 'basketWeave':
+      createBasketWeave();
+      break;
+    case 'leno':
+      createLenoWeave();
+      break;
+    case 'honeycomb':
+      createHoneycomb();
+      break;
+    case 'fibonacci':
+      createFibonacciSpiral();
+      break;
+    case 'voronoi':
+      createVoronoiTessellation();
+      break;
+  }
+}
+
+function createCloth() {
+  points = [];
+  sticks = [];
+
+  const shape = shapeSelect.value;
+  switch(shape) {
+    case 'rectangle':
+      createRectangularCloth();
+      break;
+    case 'circle':
+      createCircularTarp();
+      break;
+    case 'triangle':
+      createTriangle();
+      break;
+    case 'hexagon':
+      createHexagon();
+      break;
+    case 'star':
+      createStar();
+      break;
+    case 'spiral':
+      createSpiral();
+      break;
+  }
+
+  applyWeavePattern();
+}
+
+function renderMesh() {
+  if (!showMesh) return;
+
+  for (let y = 0; y < clothSize - 1; y++) {
+    for (let x = 0; x < clothSize - 1; x++) {
+      const p1 = points[y * clothSize + x];
+      const p2 = points[y * clothSize + x + 1];
+      const p3 = points[(y + 1) * clothSize + x];
+      const p4 = points[(y + 1) * clothSize + x + 1];
+
+      if (!p1 || !p2 || !p3 || !p4) continue;
+
+      const hasAllSticks = sticks.some(s => 
+        (s.p1 === p1 && s.p2 === p2) || (s.p1 === p2 && s.p2 === p1)
+      ) && sticks.some(s =>
+        (s.p1 === p2 && s.p2 === p4) || (s.p1 === p4 && s.p2 === p2)
+      ) && sticks.some(s =>
+        (s.p1 === p4 && s.p2 === p3) || (s.p1 === p3 && s.p2 === p4)
+      ) && sticks.some(s =>
+        (s.p1 === p3 && s.p2 === p1) || (s.p1 === p1 && s.p2 === p3)
+      );
+
+      if (!hasAllSticks) continue;
+
+      const dx = (p2.x - p1.x + p4.x - p3.x) / 2;
+      const dy = (p3.y - p1.y + p4.y - p2.y) / 2;
+      const dz = Math.min(Math.abs(dx) + Math.abs(dy), 100) / 100;
+
+      const shade = 0.2 + (0.8 * dz);
+
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.lineTo(p4.x, p4.y);
+      ctx.lineTo(p3.x, p3.y);
+      ctx.closePath();
+
+      let fillStyle;
+      switch(meshStyle) {
+        case 'solid':
+          fillStyle = `rgba(100,100,200,${shade * meshOpacity})`;
+          break;
+        case 'gradient':
+          const gradient = ctx.createLinearGradient(0, p1.y, 0, p4.y);
+          gradient.addColorStop(0, `rgba(100,100,200,${shade * meshOpacity})`);
+          gradient.addColorStop(1, `rgba(200,100,100,${shade * meshOpacity})`);
+          fillStyle = gradient;
+          break;
+        case 'fabric':
+          fillStyle = `rgba(150,150,150,${shade * meshOpacity})`;
+          break;
+        case 'leather':
+          fillStyle = `rgba(139,69,19,${shade * meshOpacity})`;
+          break;
+      }
+      
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+    }
+  }
+
+  ctx.lineWidth = 1;
+  for (let y = 0; y < clothSize - 1; y++) {
+    for (let x = 0; x < clothSize - 1; x++) {
+      const p1 = points[y * clothSize + x];
+      const p2 = points[y * clothSize + x + 1];
+      const p3 = points[(y + 1) * clothSize + x];
+      const p4 = points[(y + 1) * clothSize + x + 1];
+
+      if (!p1 || !p2 || !p3 || !p4) continue;
+
+      const hasAllSticks = sticks.some(s => 
+        (s.p1 === p1 && s.p2 === p2) || (s.p1 === p2 && s.p2 === p1)
+      ) && sticks.some(s =>
+        (s.p1 === p2 && s.p2 === p4) || (s.p1 === p4 && s.p2 === p2)
+      ) && sticks.some(s =>
+        (s.p1 === p4 && s.p2 === p3) || (s.p1 === p3 && s.p2 === p4)
+      ) && sticks.some(s =>
+        (s.p1 === p3 && s.p2 === p1) || (s.p1 === p1 && s.p2 === p3)
+      );
+
+      if (hasAllSticks) continue;
+
+      sticks.forEach(s => {
+        if ((s.p1 === p1 && s.p2 === p2) || (s.p1 === p2 && s.p2 === p1) ||
+            (s.p1 === p2 && s.p2 === p4) || (s.p1 === p4 && s.p2 === p2) ||
+            (s.p1 === p4 && s.p2 === p3) || (s.p1 === p3 && s.p2 === p4) ||
+            (s.p1 === p3 && s.p2 === p1) || (s.p1 === p1 && s.p2 === p3)) {
+          
+          switch(meshStyle) {
+            case 'solid':
+              ctx.strokeStyle = `rgba(50,50,150,${meshOpacity})`;
+              break;
+            case 'gradient':
+              ctx.strokeStyle = `rgba(100,100,150,${meshOpacity})`;
+              break;
+            case 'fabric':
+              ctx.strokeStyle = `rgba(100,100,100,${meshOpacity})`;
+              break;
+            case 'leather':
+              ctx.strokeStyle = `rgba(89,39,9,${meshOpacity})`;
+              break;
+          }
+          
+          ctx.beginPath();
+          ctx.moveTo(s.p1.x, s.p1.y);
+          ctx.lineTo(s.p2.x, s.p2.y);
+          ctx.stroke();
+        }
+      });
+    }
+  }
+}
+
+function getTensionColor(tension) {
+  tension = Math.min(tension, 1);
+  const r = Math.floor(255 * tension);
+  const g = Math.floor(255 * (1 - tension));
+  const b = 0;
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function handleCollisions() {
+  // Point-to-point collisions
+  const radius = 5;
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      const p1 = points[i];
+      const p2 = points[j];
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < radius * 2) {
+        const angle = Math.atan2(dy, dx);
+        const targetX = p1.x + Math.cos(angle) * radius * 2;
+        const targetY = p1.y + Math.sin(angle) * radius * 2;
+
+        const ax = (targetX - p2.x) * 0.5;
+        const ay = (targetY - p2.y) * 0.5;
+
+        if (!p1.pinned) {
+          p1.x -= ax;
+          p1.y -= ay;
+        }
+        if (!p2.pinned) {
+          p2.x += ax;
+          p2.y += ay;
+        }
+      }
+    }
+
+    // Point-to-stick collisions
+    for (const stick of sticks) {
+      if (stick.p1 === points[i] || stick.p2 === points[i]) continue;
+
+      const point = points[i];
+      const stickP1 = stick.p1;
+      const stickP2 = stick.p2;
+
+      // Calculate closest point on stick
+      const stickDx = stickP2.x - stickP1.x;
+      const stickDy = stickP2.y - stickP1.y;
+      const stickLength = Math.sqrt(stickDx * stickDx + stickDy * stickDy);
+      
+      if (stickLength === 0) continue;
+
+      const t = Math.max(0, Math.min(1, (
+        (point.x - stickP1.x) * stickDx +
+        (point.y - stickP1.y) * stickDy
+      ) / (stickLength * stickLength)));
+
+      const closestX = stickP1.x + t * stickDx;
+      const closestY = stickP1.y + t * stickDy;
+
+      const dx = point.x - closestX;
+      const dy = point.y - closestY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < radius) {
+        const pushAmount = (radius - distance) / 2;
+        const pushX = (dx / distance) * pushAmount;
+        const pushY = (dy / distance) * pushAmount;
+
+        if (!point.pinned) {
+          point.x += pushX;
+          point.y += pushY;
+        }
+        
+        if (!stickP1.pinned && !stickP2.pinned) {
+          stickP1.x -= pushX * (1 - t);
+          stickP1.y -= pushY * (1 - t);
+          stickP2.x -= pushX * t;
+          stickP2.y -= pushY * t;
+        }
+      }
+    }
+  }
+}
+
+let lastTime = 0;
+function update(timestamp) {
+  if (!lastTime) lastTime = timestamp;
+  let dt = (timestamp - lastTime) / 1000; 
+  lastTime = timestamp;
+
+  if (!isPaused) {
+    dt *= simSpeed;
+    points.forEach(p => {
+      p.update(dt);
+      p.tension = 0;
+    });
+
+    sticks = sticks.filter(stick => !stick.update());
+
+    if (collisionToggle.checked) {
+      handleCollisions();
+    }
+  }
+
+  if (draggedPoints.length > 0) {
+    draggedPoints.forEach(dp => {
+      if (!dp.point.pinned) {
+        dp.point.x = mouseX + dp.offsetX;
+        dp.point.y = mouseY + dp.offsetY;
+      }
+    });
+  }
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!showMesh) {
+    sticks.forEach((s, i) => {
+      if (isRainbowMode) {
+        ctx.strokeStyle = getRainbowColor(rainbowOffset + i * 0.02);
+      } else {
+        ctx.strokeStyle = getTensionColor(s.tension);
+      }
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(s.p1.x, s.p1.y);
+      ctx.lineTo(s.p2.x, s.p2.y);
+      ctx.stroke();
+    });
+
+    points.forEach((p, i) => {
+      if (isRainbowMode) {
+        ctx.fillStyle = getRainbowColor(rainbowOffset + i * 0.02);
+      } else {
+        ctx.fillStyle = getTensionColor(p.tension);
+      }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    ctx.fillStyle = isRainbowMode ? getRainbowColor(rainbowOffset) : 'rgba(255, 0, 0, 0.8)';
+    points.filter(p => p.pinned).forEach(p => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  if (isRainbowMode) {
+    rainbowOffset += 0.005;
+  }
+
+  debugElement.textContent = `Points: ${points.length}, Sticks: ${sticks.length}, Gravity: ${gravityStrength.toFixed(2)}, Wind: ${windStrength.toFixed(2)}, Tension: ${tensionSlider.value}%, Tear Strength: ${tearStrengthSlider.value}%, Tear Randomness: ${tearRandomnessSlider.value}%, Damping: ${friction.toFixed(2)}, Cloth Size: ${clothSize}x${clothSize}, Sim Speed: ${simSpeed.toFixed(2)}x, Weave: ${weavePatternSelect.value}`;
+
+  lastMouseX = mouseX;
+  lastMouseY = mouseY;
+
+  requestAnimationFrame(update);
+}
+
+function init() {
+  canvas.width = window.innerWidth - 300; // Subtract chat sidebar width
+  createCloth();
+  requestAnimationFrame(update);
+}
+
+document.getElementById('reset').addEventListener('click', createCloth);
+document.getElementById('pauseBtn').addEventListener('click', () => {
+  isPaused = !isPaused;
+  document.getElementById('pauseBtn').textContent = isPaused ? 'Resume' : 'Pause';
+});
+
+clothSizeSlider.addEventListener('input', () => {
+  clothSize = parseInt(clothSizeSlider.value);
+  clothSizeValue.textContent = clothSize;
+  createCloth();
+});
+
+tensionSlider.addEventListener('input', () => {
+  const tension = tensionSlider.value;
+  tensionValue.textContent = tension;
+  stickStrength = 0.06 * (tension / 100);
+});
+
+tearRandomnessSlider.addEventListener('input', () => {
+  const randomness = tearRandomnessSlider.value;
+  tearRandomnessValue.textContent = randomness;
+  tearRandomness = parseInt(randomness);
+});
+
+gravitySlider.addEventListener('input', () => {
+  const gravity = gravitySlider.value;
+  gravityValue.textContent = gravity;
+  gravityStrength = (gravity / 100) * 2;
+});
+
+windSlider.addEventListener('input', () => {
+  const wind = windSlider.value;
+  windValue.textContent = wind;
+  windStrength = (wind / 100) * 0.5;
+});
+
+tearStrengthSlider.addEventListener('input', () => {
+  const strength = tearStrengthSlider.value;
+  tearStrengthValue.textContent = strength;
+  tearStrength = strength < 100 ? 50 * (strength / 100) : Infinity;
+});
+
+dampingSlider.addEventListener('input', () => {
+  const damping = dampingSlider.value;
+  friction = damping / 100;
+  dampingValue.textContent = friction.toFixed(2);
+});
+
+simSpeedSlider.addEventListener('input', () => {
+  const speed = simSpeedSlider.value;
+  simSpeed = speed / 100;
+  simSpeedValue.textContent = speed;
+});
+
+dragRadiusSlider.addEventListener('input', () => {
+  dragRadius = parseInt(dragRadiusSlider.value);
+  dragRadiusValue.textContent = dragRadius;
+});
+
+document.getElementById('meshOpacitySlider').addEventListener('input', (e) => {
+  meshOpacity = e.target.value / 100;
+  document.getElementById('meshOpacityValue').textContent = e.target.value;
+});
+
+weavePatternSelect.addEventListener('change', createCloth);
+shapeSelect.addEventListener('change', createCloth);
+
+document.getElementById('meshToggle').addEventListener('change', (e) => {
+  showMesh = e.target.checked;
+});
+
+document.getElementById('meshStyle').addEventListener('change', (e) => {
+  meshStyle = e.target.value;
+});
+
+document.getElementById('rainbowToggle').addEventListener('change', (e) => {
+  isRainbowMode = e.target.checked;
+});
+
+window.addEventListener('resize', () => {
+  canvas.width = window.innerWidth - 300; // Subtract chat sidebar width
+  canvas.height = window.innerHeight;
+  createCloth();
+});
+
+function getPointsInRadius(x, y, radius) {
+  let pointsInRadius = [];
+  points.forEach(p => {
+    const distance = Math.hypot(p.x - x, p.y - y);
+    if (distance < radius) {
+      pointsInRadius.push({
+        point: p,
+        offsetX: p.x - x,
+        offsetY: p.y - y
+      });
+    }
+  });
+  return pointsInRadius;
+}
+
+function cutCloth(x1, y1, x2, y2) {
+  sticks = sticks.filter(stick => {
+    const x3 = stick.p1.x;
+    const y3 = stick.p1.y;
+    const x4 = stick.p2.x;
+    const y4 = stick.p2.y;
+
+    const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+    if (den === 0) return true;
+
+    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+    const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / den;
+
+    if (t > 0 && t < 1 && u > 0 && u < 1) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function addPoint(x, y) {
+  const newPoint = new Point(x, y);
+  points.push(newPoint);
+
+  points.forEach(p => {
+    if (p !== newPoint && Math.hypot(p.x - x, p.y - y) < 50) {
+      sticks.push(new Stick(newPoint, p));
+    }
+  });
+}
+
+function getClosestPoint(x, y) {
+  let closestPoint = null;
+  let minDistance = Infinity;
+  
+  points.forEach(p => {
+    const distance = Math.hypot(p.x - x, p.y - y);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestPoint = p;
+    }
+  });
+
+  // Only return point if it's within a reasonable distance (e.g. 20 pixels)
+  return minDistance < 20 ? closestPoint : null;
+}
+
+canvas.addEventListener('mousedown', (e) => {
+  isMouseDown = true;
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+  const tool = document.querySelector('input[name="tool"]:checked').value;
+
+  switch (tool) {
+    case 'drag':
+      draggedPoints = getPointsInRadius(mouseX, mouseY, dragRadius);
+      break;
+    case 'pin':
+      const point = getClosestPoint(mouseX, mouseY);
+      if (point) {
+        point.pinned = !point.pinned;
+      }
+      break;
+    case 'add':
+      addPoint(mouseX, mouseY);
+      break;
+  }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+  if (document.getElementById('cutTool').checked && isMouseDown) {
+    cutCloth(lastMouseX, lastMouseY, mouseX, mouseY);
+  }
+});
+
+canvas.addEventListener('mouseup', () => {
+  isMouseDown = false;
+  draggedPoints = [];
+});
+
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const touch = e.touches[0];
+  mouseX = touch.clientX;
+  mouseY = touch.clientY;
+  isMouseDown = true;
+  const tool = document.querySelector('input[name="tool"]:checked').value;
+
+  switch (tool) {
+    case 'drag':
+      draggedPoints = getPointsInRadius(mouseX, mouseY, dragRadius);
+      break;
+    case 'pin':
+      const point = getClosestPoint(mouseX, mouseY);
+      if (point) {
+        point.pinned = !point.pinned;
+      }
+      break;
+    case 'add':
+      addPoint(mouseX, mouseY);
+      break;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  const touch = e.touches[0];
+  mouseX = touch.clientX;
+  mouseY = touch.clientY;
+  if (document.getElementById('cutTool').checked && isMouseDown) {
+    cutCloth(lastMouseX, lastMouseY, mouseX, mouseY);
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => {
+  isMouseDown = false;
+  draggedPoints = [];
+});
+
+init();
+
+function getRainbowColor(offset) {
+  const hue = (offset * 360) % 360;
+  return `hsl(${hue}, 100%, 50%)`;
+}
+</script>
+<script>
+window.addEventListener('load', () => {
+  // Hide loading screen once everything is loaded
+  document.getElementById('loading-screen').classList.add('hidden');
+});
+
+// Add error handling
+window.addEventListener('error', (e) => {
+  console.error('Runtime error:', e);
+  alert('An error occurred. Please refresh the page.');
+});
+
+// Add analytics (replace with your analytics code)
+if (location.hostname === 'websim.io') {
+  // Production analytics code here
+}
+</script>
+</body></html>
